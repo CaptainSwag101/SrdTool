@@ -9,10 +9,10 @@ namespace SrdTool
             Console.WriteLine("SRD Tool by CaptainSwag101\n" +
                 "Version 0.0.1, built on 2018/12/30\n");
 
-            Srd srd = Srd.Open(args[0]);
+            Srd srd = new Srd(args[0]);
             if (args.Length == 1)
             {
-                srd.ExtractImages(args[0]);
+                srd.ExtractImages();
             }
             else if (args.Length == 3)
             {
