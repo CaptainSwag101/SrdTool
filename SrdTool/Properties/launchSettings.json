@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "SrdTool": {
+      "commandName": "Project",
+      "commandLineArgs": "C:\\Users\\James\\Desktop\\stand_000_000\\model.srd"
+    }
+  }
+}
