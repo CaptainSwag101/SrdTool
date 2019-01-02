@@ -28,9 +28,9 @@ namespace SrdTool
             byte[] b3 = reader.ReadBytes(4);
             Array.Reverse(b3);
 
-            DataLength = BitConverter.ToInt32(b1);
-            SubdataLength = BitConverter.ToInt32(b2);
-            Unk = BitConverter.ToInt32(b3);
+            DataLength = BitConverter.ToInt32(b1, 0);
+            SubdataLength = BitConverter.ToInt32(b2, 0);
+            Unk = BitConverter.ToInt32(b3, 0);
         }
     }
 
@@ -137,9 +137,8 @@ namespace SrdTool
 
                 if (m > 0)
                     mipmapName = mipmapName.Insert(mipmapName.Length - extensionLength, string.Format(" ({0}x{1})", mipWidth.ToString(), mipHeight.ToString()));
-
-
-                FileStream imageOut = File.Create(mipmapName);
+                
+                
                 ImageFormat imageFormat;
                 switch (mipmapName.Split('.').Last().ToLower())
                 {
@@ -150,19 +149,14 @@ namespace SrdTool
                     case "png":
                         imageFormat = ImageFormat.Png;
                         break;
-
-                    case "tga":
-                        imageFormat = ImageFormat.MemoryBmp;
-                        break;
-
-                    case "dds":
-                        imageFormat = ImageFormat.MemoryBmp;
-                        break;
-
+                        
                     default:
                         imageFormat = ImageFormat.Png;
+                        mipmapName += ".png";
                         break;
                 }
+
+                FileStream imageOut = File.Create(mipmapName);
                 tex.Save(imageOut, imageFormat);
                 imageOut.Close();
                 Console.WriteLine("Sucessfully extracted texture data: {0}", mipmapName);

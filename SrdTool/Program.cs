@@ -9,7 +9,17 @@ namespace SrdTool
             Console.WriteLine("SRD Tool by CaptainSwag101\n" +
                 "Version 0.0.2, built on 2019/01/01\n");
 
-            Srd srd = new Srd(args[0]);
+            if (args.Length == 0)
+            {
+                Console.WriteLine("ERROR: No input file specified.");
+                return;
+            }
+
+            Srd srd = Srd.FromFile(args[0]);
+
+            if (srd == null)
+                return;
+
             if (args.Length == 1)
             {
                 srd.ExtractImages();
@@ -18,8 +28,6 @@ namespace SrdTool
             {
                 //srd.ReplaceImage(args[0], int.Parse(args[1]), args[2]);
             }
-
-            Console.Read();
         }
     }
 }

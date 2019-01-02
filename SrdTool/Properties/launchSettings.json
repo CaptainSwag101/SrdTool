@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "SrdTool": {
-      "commandName": "Project",
-      "commandLineArgs": "C:\\Users\\James\\Desktop\\texture.srd"
-    }
-  }
-}

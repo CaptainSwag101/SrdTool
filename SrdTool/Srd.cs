@@ -12,26 +12,28 @@ namespace SrdTool
         public string Filepath;
         public List<Block> Blocks;
 
-        public Srd(string srdPath)
+        public static Srd FromFile(string srdPath)
         {
+            Srd result = new Srd();
+
             FileInfo srdInfo = new FileInfo(srdPath);
             if (!srdInfo.Exists)
             {
                 Console.WriteLine("ERROR: Input file does not exist.");
-                return;
+                return null;
             }
 
             if (srdInfo.Extension.ToLower() != ".srd")
             {
                 Console.WriteLine("ERROR: Input file does not have the \".srd\" extension.");
-                return;
+                return null;
             }
 
-            Filepath = srdPath;
+            result.Filepath = srdPath;
 
 
             BinaryReader reader = new BinaryReader(new FileStream(srdPath, FileMode.Open));
-            Blocks = new List<Block>();
+            result.Blocks = new List<Block>();
 
             // Read blocks
             while (reader.BaseStream.Position < reader.BaseStream.Length)
@@ -50,15 +52,17 @@ namespace SrdTool
                         break;
                 }
 
-                Blocks.Add(block);
+                result.Blocks.Add(block);
             }
+
+            return result;
         }
 
         public void ExtractImages(bool extractMipmaps = false)
         {
-            Console.WriteLine("Searching for texture data in {0}:", this.Filepath);
+            Console.WriteLine("Searching for texture data in {0}:", Filepath);
 
-            string srdvPath = this.Filepath + 'v';
+            string srdvPath = Filepath + 'v';
             if (!File.Exists(srdvPath))
             {
                 Console.WriteLine("ERROR: No SRDV file found.");
