@@ -7,7 +7,7 @@ namespace SrdTool
         static void Main(string[] args)
         {
             Console.WriteLine("SRD Tool by CaptainSwag101\n" +
-                "Version 0.0.1, built on 2018/12/30\n");
+                "Version 0.0.2, built on 2019/01/01\n");
 
             Srd srd = new Srd(args[0]);
             if (args.Length == 1)

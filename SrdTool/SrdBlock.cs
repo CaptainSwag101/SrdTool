@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -97,7 +98,7 @@ namespace SrdTool
 
 
                 // Determine pixel format
-                PixelDataFormat pixelFormat = PixelDataFormat.FormatBPTC;
+                PixelDataFormat pixelFormat = PixelDataFormat.Undefined;
                 switch (Format)
                 {
                     case 0x0F:
@@ -139,7 +140,30 @@ namespace SrdTool
 
 
                 FileStream imageOut = File.Create(mipmapName);
-                tex.Save(imageOut, System.Drawing.Imaging.ImageFormat.Bmp);
+                ImageFormat imageFormat;
+                switch (mipmapName.Split('.').Last().ToLower())
+                {
+                    case "bmp":
+                        imageFormat = ImageFormat.Bmp;
+                        break;
+
+                    case "png":
+                        imageFormat = ImageFormat.Png;
+                        break;
+
+                    case "tga":
+                        imageFormat = ImageFormat.MemoryBmp;
+                        break;
+
+                    case "dds":
+                        imageFormat = ImageFormat.MemoryBmp;
+                        break;
+
+                    default:
+                        imageFormat = ImageFormat.Png;
+                        break;
+                }
+                tex.Save(imageOut, imageFormat);
                 imageOut.Close();
                 Console.WriteLine("Sucessfully extracted texture data: {0}", mipmapName);
             }
