@@ -76,5 +76,38 @@ namespace SrdTool
                     ((TxrBlock)block).ExtractImages(srdvPath, extractMipmaps);
             }
         }
+
+        public void ReplaceImages(string replacementImagePath, int indexToReplace, bool replaceMipmaps = false)
+        {
+            Console.WriteLine("Searching for texture data in {0}:", Filepath);
+
+            string srdvPath = Filepath + 'v';
+            if (!File.Exists(srdvPath))
+            {
+                Console.WriteLine("ERROR: No SRDV file found.");
+                return;
+            }
+
+            // Iterate through the TXR blocks and replace the requested block
+            int txrIndex = 0;
+            foreach (Block block in Blocks)
+            {
+                if (block is TxrBlock)
+                {
+                    if (txrIndex == indexToReplace)
+                    {
+                        ((TxrBlock)block).ReplaceImages(srdvPath, replacementImagePath, replaceMipmaps);
+                        break;
+                    }
+                    else
+                    {
+                        txrIndex++;
+                        continue;
+                    }
+                }
+            }
+
+            // TODO: Save the SDR file
+        }
     }
 }

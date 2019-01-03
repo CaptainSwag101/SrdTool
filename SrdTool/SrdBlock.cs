@@ -83,7 +83,6 @@ namespace SrdTool
         public void ExtractImages(string srdvPath, bool extractMipmaps)
         {
             // Read image data based on resource info
-            List<byte[]> images = new List<byte[]>();
             for (int m = 0; m < (extractMipmaps ? ResourceInfo.MipmapInfoList.Count : 1); m++)
             {
                 byte[] imageData;
@@ -160,6 +159,82 @@ namespace SrdTool
                 tex.Save(imageOut, imageFormat);
                 imageOut.Close();
                 Console.WriteLine("Sucessfully extracted texture data: {0}", mipmapName);
+            }
+        }
+
+        public void ReplaceImages(string srdvPath, string replacementImagePath, bool replaceMipmaps)
+        {
+            // NOTE: Since it would normally be a pain in the ass to carefully insert
+            // our replacement texture data into the SRDV and shuffle all the existing
+            // data around to ensure all other resource info isn't accidentally overwritten,
+            // instead I'm just going to zero out the original texture data in the file,
+            // and append our new texture data at the end of the SRDV file.
+
+            // TODO: Make a second pass through the SRDV file afterward to
+            // re -shuffle all our data around to reclaim the lost space.
+
+
+            // Read image data based on resource info
+            for (int m = 0; m < (replaceMipmaps ? ResourceInfo.MipmapInfoList.Count : 1); m++)
+            {
+                if (!File.Exists(replacementImagePath))
+                {
+                    Console.WriteLine("ERROR: replacement image file does not exist.");
+                    return;
+                }
+
+                // Generate raw bitmap byte array in BRGA
+                Bitmap replacementImage = new Bitmap(File.OpenRead(replacementImagePath));
+                MemoryStream raw = new MemoryStream();
+                BinaryWriter rawWriter = new BinaryWriter(raw);
+                for (int y = 0; y < replacementImage.Height; y++)
+                {
+                    for (int x = 0; x < replacementImage.Width; x++)
+                    {
+                        rawWriter.Write(replacementImage.GetPixel(x, y).B);
+                        rawWriter.Write(replacementImage.GetPixel(x, y).G);
+                        rawWriter.Write(replacementImage.GetPixel(x, y).R);
+                        rawWriter.Write(replacementImage.GetPixel(x, y).A);
+                    }
+                }
+                rawWriter.Flush();
+                
+                using (BinaryWriter srdvWriter = new BinaryWriter(new FileStream(srdvPath, FileMode.Open)))
+                {
+                    // Make sure the old texture isn't somehow outside the file bounds
+                    // (This can be caused by replacing a texture and then
+                    // reverting the SRDV file but not the SRD file)
+                    int fixedStart = (int)Math.Min(ResourceInfo.MipmapInfoList[m].Start, srdvWriter.BaseStream.Length);
+                    srdvWriter.Seek(fixedStart, SeekOrigin.Begin);
+
+                    // Zero out old texture data
+                    byte[] zero = new byte[ResourceInfo.MipmapInfoList[m].Length];
+                    srdvWriter.Write(zero);
+
+                    // Seek to end of file
+                    srdvWriter.Seek(0, SeekOrigin.End);
+
+                    // Generate new raw texture data
+                    byte[] replacementImageData = raw.GetBuffer();
+
+                    // Create a new MipmapInfo to replace our old one
+                    MipmapInfo replacementMipmapInfo = new MipmapInfo
+                    {
+                        Start = (int)srdvWriter.BaseStream.Position,
+                        Length = replacementImageData.Length,
+                        Unk1 = ResourceInfo.MipmapInfoList[m].Unk1,
+                        Unk2 = ResourceInfo.MipmapInfoList[m].Unk2
+                    };
+                    ResourceInfo.MipmapInfoList[m] = replacementMipmapInfo;
+
+                    srdvWriter.Write(replacementImageData);
+
+                    // TODO: Modify palette data
+                }
+
+                DispWidth = (short)replacementImage.Width;
+                DispHeight = (short)replacementImage.Height;
+                Format = 0x01; // 32-bit BGRA
             }
         }
     }

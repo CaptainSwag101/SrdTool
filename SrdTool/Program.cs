@@ -7,7 +7,7 @@ namespace SrdTool
         static void Main(string[] args)
         {
             Console.WriteLine("SRD Tool by CaptainSwag101\n" +
-                "Version 0.0.2, built on 2019/01/01\n");
+                "Version 0.0.3, built on 2019/01/03\n");
 
             if (args.Length == 0)
             {
@@ -15,18 +15,18 @@ namespace SrdTool
                 return;
             }
 
-            Srd srd = Srd.FromFile(args[0]);
 
-            if (srd == null)
-                return;
+            Srd srd = Srd.FromFile(args[0]);
+            if (srd == null) return;
+
 
             if (args.Length == 1)
             {
                 srd.ExtractImages();
             }
-            else if (args.Length == 3)
+            else if (args.Length == 4)
             {
-                //srd.ReplaceImage(args[0], int.Parse(args[1]), args[2]);
+                srd.ReplaceImages(args[1], int.Parse(args[2]), bool.Parse(args[3]));
             }
         }
     }
