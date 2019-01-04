@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace SrdTool
@@ -32,6 +33,23 @@ namespace SrdTool
             SubdataLength = BitConverter.ToInt32(b2, 0);
             Unk = BitConverter.ToInt32(b3, 0);
         }
+
+        public void WriteData(ref BinaryWriter writer)
+        {
+            writer.Write(new ASCIIEncoding().GetBytes(BlockType));
+
+            // Swap endianness, then write raw data
+            byte[] b1 = BitConverter.GetBytes(DataLength);
+            Array.Reverse(b1);
+            byte[] b2 = BitConverter.GetBytes(SubdataLength);
+            Array.Reverse(b2);
+            byte[] b3 = BitConverter.GetBytes(Unk);
+            Array.Reverse(b3);
+
+            writer.Write(b1);
+            writer.Write(b2);
+            writer.Write(b3);
+        }
     }
 
 
@@ -45,7 +63,9 @@ namespace SrdTool
 
 
     abstract class Block
-    { }
+    {
+        public abstract void WriteData(ref BinaryWriter writer);
+    }
 
 
     class TxrBlock : Block
@@ -57,7 +77,7 @@ namespace SrdTool
         public short DispHeight;
         public short Scanline;
         public byte Format;
-        public byte Unk2;
+        public byte MipmapCount;
         public byte Palette;
         public byte PaletteId;
         public RsiBlock ResourceInfo;
@@ -72,12 +92,44 @@ namespace SrdTool
             DispHeight = reader.ReadInt16();
             Scanline = reader.ReadInt16();
             Format = reader.ReadByte();
-            Unk2 = reader.ReadByte();
+            MipmapCount = reader.ReadByte();
             Palette = reader.ReadByte();
             PaletteId = reader.ReadByte();
 
             BinaryReader rsiReader = new BinaryReader(new MemoryStream(reader.ReadBytes(Header.SubdataLength)));
             ResourceInfo = new RsiBlock(ref rsiReader);
+            rsiReader.Close();
+        }
+
+        public override void WriteData(ref BinaryWriter writer)
+        {
+            // Adjust Header.SubdataLength based on the size of our RsiBlock
+            Header.SubdataLength = 0x20 + ResourceInfo.Header.DataLength + (16 - (ResourceInfo.Header.DataLength % 16)) % 16;
+            Header.WriteData(ref writer);
+
+            writer.Write(BitConverter.GetBytes(Unk1));
+            writer.Write(BitConverter.GetBytes(Swizzle));
+            writer.Write(BitConverter.GetBytes(DispWidth));
+            writer.Write(BitConverter.GetBytes(DispHeight));
+            writer.Write(BitConverter.GetBytes(Scanline));
+            writer.Write(Format);
+            writer.Write(MipmapCount);
+            writer.Write(Palette);
+            writer.Write(PaletteId);
+
+            ResourceInfo.WriteData(ref writer);
+
+            // Somehow we lose the $CT0 block when we load the file,
+            // so just generate a new one.
+            int paddingLength = 16 - (int)(writer.BaseStream.Position % 16);
+            if (paddingLength != 16)
+            {
+                byte[] padding = new byte[paddingLength];
+                writer.Write(padding);
+            }
+            writer.Write(new ASCIIEncoding().GetBytes("$CT0"));
+            byte[] zero = new byte[12];
+            writer.Write(zero);
         }
 
         public void ExtractImages(string srdvPath, bool extractMipmaps)
@@ -162,7 +214,7 @@ namespace SrdTool
             }
         }
 
-        public void ReplaceImages(string srdvPath, string replacementImagePath, bool replaceMipmaps)
+        public void ReplaceImages(string srdvPath, string replacementImagePath, bool generateMipmaps)
         {
             // NOTE: Since it would normally be a pain in the ass to carefully insert
             // our replacement texture data into the SRDV and shuffle all the existing
@@ -172,34 +224,22 @@ namespace SrdTool
 
             // TODO: Make a second pass through the SRDV file afterward to
             // re -shuffle all our data around to reclaim the lost space.
-
-
-            // Read image data based on resource info
-            for (int m = 0; m < (replaceMipmaps ? ResourceInfo.MipmapInfoList.Count : 1); m++)
+            
+            
+            if (!File.Exists(replacementImagePath))
             {
-                if (!File.Exists(replacementImagePath))
-                {
-                    Console.WriteLine("ERROR: replacement image file does not exist.");
-                    return;
-                }
+                Console.WriteLine("ERROR: replacement image file does not exist.");
+                return;
+            }
 
-                // Generate raw bitmap byte array in BRGA
-                Bitmap replacementImage = new Bitmap(File.OpenRead(replacementImagePath));
-                MemoryStream raw = new MemoryStream();
-                BinaryWriter rawWriter = new BinaryWriter(raw);
-                for (int y = 0; y < replacementImage.Height; y++)
-                {
-                    for (int x = 0; x < replacementImage.Width; x++)
-                    {
-                        rawWriter.Write(replacementImage.GetPixel(x, y).B);
-                        rawWriter.Write(replacementImage.GetPixel(x, y).G);
-                        rawWriter.Write(replacementImage.GetPixel(x, y).R);
-                        rawWriter.Write(replacementImage.GetPixel(x, y).A);
-                    }
-                }
-                rawWriter.Flush();
-                
-                using (BinaryWriter srdvWriter = new BinaryWriter(new FileStream(srdvPath, FileMode.Open)))
+            // Generate raw bitmap byte array in ARGB
+            Bitmap raw = new Bitmap(File.OpenRead(replacementImagePath));
+
+            // Regenerate image data based on resource info
+            List<MipmapInfo> newMipmapInfoList = new List<MipmapInfo>();
+            using (BinaryWriter srdvWriter = new BinaryWriter(File.OpenWrite(srdvPath)))
+            {
+                for (int m = 0; m < ResourceInfo.MipmapInfoList.Count; m++)
                 {
                     // Make sure the old texture isn't somehow outside the file bounds
                     // (This can be caused by replacing a texture and then
@@ -214,28 +254,59 @@ namespace SrdTool
                     // Seek to end of file
                     srdvWriter.Seek(0, SeekOrigin.End);
 
-                    // Generate new raw texture data
-                    byte[] replacementImageData = raw.GetBuffer();
-
-                    // Create a new MipmapInfo to replace our old one
-                    MipmapInfo replacementMipmapInfo = new MipmapInfo
+                    // If this is a regenerated mipmap or the main image, generate a resized bitmap to save
+                    if (m == 0 || generateMipmaps)
                     {
-                        Start = (int)srdvWriter.BaseStream.Position,
-                        Length = replacementImageData.Length,
-                        Unk1 = ResourceInfo.MipmapInfoList[m].Unk1,
-                        Unk2 = ResourceInfo.MipmapInfoList[m].Unk2
-                    };
-                    ResourceInfo.MipmapInfoList[m] = replacementMipmapInfo;
+                        Size resize = new Size(Math.Max(raw.Width / (int)Math.Pow(2, m), 1), Math.Max(raw.Height / (int)Math.Pow(2, m), 1));
+                        Bitmap replacementImage = new Bitmap(raw, resize);
 
-                    srdvWriter.Write(replacementImageData);
+                        var bitmapData = replacementImage.LockBits(new Rectangle(0, 0, replacementImage.Width, replacementImage.Height), ImageLockMode.ReadOnly, replacementImage.PixelFormat);
+                        var length = bitmapData.Stride * bitmapData.Height;
+                        byte[] replacementImageData = new byte[length];
 
-                    // TODO: Modify palette data
+                        if (m == 0)
+                            Scanline = (short)bitmapData.Stride;
+
+                        // Copy bitmap to byte[] but swap from ARGB to BGRA
+                        Marshal.Copy(bitmapData.Scan0, replacementImageData, 0, length);
+                        for (int i = 0; i < length; i += 4)
+                        {
+                            byte[] swap = new byte[4];
+                            Array.Copy(replacementImageData, i, swap, 0, 4);
+                            Array.Reverse(swap);
+                            Array.Copy(swap, 0, replacementImageData, i, 4);
+                        }
+                        replacementImage.UnlockBits(bitmapData);
+
+                        // Create a new MipmapInfo to replace our old one
+                        MipmapInfo replacementMipmapInfo = new MipmapInfo
+                        {
+                            Start = (int)srdvWriter.BaseStream.Position,
+                            Length = replacementImageData.Length,
+                            Unk1 = ResourceInfo.MipmapInfoList[m].Unk1,
+                            Unk2 = ResourceInfo.MipmapInfoList[m].Unk2
+                        };
+                        newMipmapInfoList.Add(replacementMipmapInfo);
+
+                        srdvWriter.Write(replacementImageData);
+
+                        // TODO: Modify palette data
+                    }
                 }
-
-                DispWidth = (short)replacementImage.Width;
-                DispHeight = (short)replacementImage.Height;
-                Format = 0x01; // 32-bit BGRA
             }
+
+            // Adjust the RsiBlock's header's data length
+            ResourceInfo.Header.DataLength -= 16 * ResourceInfo.MipmapInfoList.Count;
+            ResourceInfo.Header.DataLength += 16 * newMipmapInfoList.Count;
+
+            // Replace old info with regenerated info
+            ResourceInfo.MipmapInfoList = newMipmapInfoList;
+            MipmapCount = (byte)ResourceInfo.MipmapInfoList.Count;
+            DispWidth = (short)raw.Width;
+            DispHeight = (short)raw.Height;
+            Format = 0x01; // 32-bit BGRA
+
+            raw.Dispose();
         }
     }
 
@@ -289,6 +360,39 @@ namespace SrdTool
             OutputFilename = ReadNullTerminatedString(ref reader);
         }
 
+        public override void WriteData(ref BinaryWriter writer)
+        {
+            Header.WriteData(ref writer);
+
+            writer.Write(Unk1);
+            writer.Write(Unk2);
+            writer.Write(Unk3);
+            writer.Write((byte)MipmapInfoList.Count);
+            writer.Write(Unk4);
+            writer.Write(Unk5);
+            writer.Write(BitConverter.GetBytes((int)(0x10 * (MipmapInfoList.Count + 1))));
+
+            foreach (MipmapInfo mipmapInfo in MipmapInfoList)
+            {
+                writer.Write(BitConverter.GetBytes(mipmapInfo.Start | 0x40000000)); // This seems to be how vanilla files are?
+                writer.Write(BitConverter.GetBytes(mipmapInfo.Length));
+                writer.Write(BitConverter.GetBytes(mipmapInfo.Unk1));
+                writer.Write(BitConverter.GetBytes(mipmapInfo.Unk2));
+            }
+
+            // Write file name
+            writer.Write(new ASCIIEncoding().GetBytes(OutputFilename));
+            // Write null terminator byte
+            writer.Write((byte)0);
+            // Pad with zeroes to nearest 16-byte boundary
+            int paddingLength = 16 - (int)(writer.BaseStream.Position % 16);
+            if (paddingLength != 16)
+            {
+                byte[] padding = new byte[paddingLength];
+                writer.Write(padding);
+            }
+        }
+
         // Annoyingly, there's no easy way to read a null-terminated ASCII string in .NET
         // (or maybe I'm just a moron), so we have to do it manually.
         private string ReadNullTerminatedString(ref BinaryReader reader)
@@ -332,6 +436,33 @@ namespace SrdTool
                 long padding = 16 - (Header.SubdataLength % 16);
                 if (padding != 16)
                     reader.BaseStream.Seek(padding, SeekOrigin.Current);
+            }
+        }
+
+        public override void WriteData(ref BinaryWriter writer)
+        {
+            Header.WriteData(ref writer);
+            
+            if (Header.DataLength > 0 && Data != null)
+            {
+                writer.Write(Data);
+                int paddingLength = 16 - (int)(writer.BaseStream.Position % 16);
+                if (paddingLength != 16)
+                {
+                    byte[] padding = new byte[paddingLength];
+                    writer.Write(padding);
+                }
+            }
+
+            if (Header.SubdataLength > 0 && Subdata != null)
+            {
+                writer.Write(Subdata);
+                int paddingLength = 16 - (int)(writer.BaseStream.Position % 16);
+                if (paddingLength != 16)
+                {
+                    byte[] padding = new byte[paddingLength];
+                    writer.Write(padding);
+                }
             }
         }
     }

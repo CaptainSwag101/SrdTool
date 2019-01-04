@@ -55,6 +55,7 @@ namespace SrdTool
                 result.Blocks.Add(block);
             }
 
+            reader.Close();
             return result;
         }
 
@@ -77,7 +78,7 @@ namespace SrdTool
             }
         }
 
-        public void ReplaceImages(string replacementImagePath, int indexToReplace, bool replaceMipmaps = false)
+        public void ReplaceImages(string replacementImagePath, int indexToReplace, bool generateMipmaps = true)
         {
             Console.WriteLine("Searching for texture data in {0}:", Filepath);
 
@@ -96,7 +97,7 @@ namespace SrdTool
                 {
                     if (txrIndex == indexToReplace)
                     {
-                        ((TxrBlock)block).ReplaceImages(srdvPath, replacementImagePath, replaceMipmaps);
+                        ((TxrBlock)block).ReplaceImages(srdvPath, replacementImagePath, generateMipmaps);
                         break;
                     }
                     else
@@ -107,7 +108,20 @@ namespace SrdTool
                 }
             }
 
-            // TODO: Save the SDR file
+            // Save the SDR file
+            File.Delete(Filepath);
+            BinaryWriter srdWriter = new BinaryWriter(File.OpenWrite(Filepath));
+            foreach (Block block in Blocks)
+            {
+                block.WriteData(ref srdWriter);
+                int paddingLength = 16 - (int)(srdWriter.BaseStream.Position % 16);
+                if (paddingLength != 16)
+                {
+                    byte[] padding = new byte[paddingLength];
+                    srdWriter.Write(padding);
+                }
+            }
+            srdWriter.Close();
         }
     }
 }
