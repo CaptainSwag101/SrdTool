@@ -267,8 +267,11 @@ namespace SrdTool
                         if (m == 0)
                             Scanline = (short)bitmapData.Stride;
 
-                        // Copy bitmap to byte[] but swap from ARGB to BGRA
+                        // Copy bitmap to byte[], which seems to auto-swap from ARGB to BGRA
                         Marshal.Copy(bitmapData.Scan0, replacementImageData, 0, length);
+
+                        // Uncomment this section if you need to manually swap from ARGB to BGRA
+                        /*
                         for (int i = 0; i < length; i += 4)
                         {
                             byte[] swap = new byte[4];
@@ -276,6 +279,7 @@ namespace SrdTool
                             Array.Reverse(swap);
                             Array.Copy(swap, 0, replacementImageData, i, 4);
                         }
+                        */
                         replacementImage.UnlockBits(bitmapData);
 
                         // Create a new MipmapInfo to replace our old one

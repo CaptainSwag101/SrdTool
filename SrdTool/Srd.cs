@@ -78,7 +78,7 @@ namespace SrdTool
             }
         }
 
-        public void ReplaceImages(string replacementImagePath, int indexToReplace, bool generateMipmaps = true)
+        public void ReplaceImages(string replacementImagePath, int indexToReplace = 0, bool generateMipmaps = true)
         {
             Console.WriteLine("Searching for texture data in {0}:", Filepath);
 

@@ -26,7 +26,9 @@ namespace SrdTool
             }
             else if (args.Length == 4)
             {
-                srd.ReplaceImages(args[1], int.Parse(args[2]), bool.Parse(args[3]));
+                int.TryParse(args[2], out int indexToReplace);
+                bool.TryParse(args[2], out bool generateMipmaps);
+                srd.ReplaceImages(args[1], indexToReplace, generateMipmaps);
             }
         }
     }
