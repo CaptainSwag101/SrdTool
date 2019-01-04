@@ -295,6 +295,11 @@ namespace SrdTool
                         srdvWriter.Write(replacementImageData);
 
                         // TODO: Modify palette data
+
+
+                        // Stop generating mipmaps smaller when we reach 1px by 1px
+                        if (resize.Width == 1 && resize.Height == 1)
+                            break;
                     }
                 }
             }
