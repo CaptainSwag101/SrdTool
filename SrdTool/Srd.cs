@@ -10,6 +10,7 @@ namespace SrdTool
     class Srd
     {
         public string Filepath;
+        public RsfBlock ResourceFolder;
         public List<Block> Blocks;
 
         public static Srd FromFile(string srdPath)
@@ -43,6 +44,11 @@ namespace SrdTool
                 string blockType = new ASCIIEncoding().GetString(reader.ReadBytes(4));
                 switch (blockType)
                 {
+                    case "$RSF":
+                        block = new RsfBlock(ref reader);
+                        result.ResourceFolder = (RsfBlock)block;
+                        break;
+
                     case "$TXR":
                         block = new TxrBlock(ref reader);
                         break;
@@ -51,8 +57,9 @@ namespace SrdTool
                         block = new UnknownBlock(ref reader, blockType);
                         break;
                 }
-
                 result.Blocks.Add(block);
+
+                Utils.ReadPadding(ref reader);
             }
 
             reader.Close();
@@ -70,15 +77,23 @@ namespace SrdTool
                 return;
             }
 
+            // Create the folder given by the RSF block and extract images
+            // into it instead of into the program's root directory
+            Directory.CreateDirectory(ResourceFolder.Name);
+
             // Iterate through blocks and extract image data
+            int txrIndex = 0;
             foreach (Block block in Blocks)
             {
                 if (block is TxrBlock)
-                    ((TxrBlock)block).ExtractImages(srdvPath, extractMipmaps);
+                {
+                    Console.WriteLine(string.Format("Extracting texture index {0}: {1}", txrIndex++, ((TxrBlock)block).ResourceInfo.OutputFilename));
+                    ((TxrBlock)block).ExtractImages(srdvPath, ResourceFolder.Name, extractMipmaps);
+                }
             }
         }
 
-        public void ReplaceImages(string replacementImagePath, int indexToReplace = 0, bool generateMipmaps = true)
+        public void ReplaceImages(string replacementImagePath, int indexToReplace, bool generateMipmaps)
         {
             Console.WriteLine("Searching for texture data in {0}:", Filepath);
 
@@ -97,14 +112,14 @@ namespace SrdTool
                 {
                     if (txrIndex == indexToReplace)
                     {
+                        Console.WriteLine(string.Format("Replacing texture index {0}: {1}", txrIndex, ((TxrBlock)block).ResourceInfo.OutputFilename));
                         ((TxrBlock)block).ReplaceImages(srdvPath, replacementImagePath, generateMipmaps);
-                        break;
                     }
                     else
                     {
-                        txrIndex++;
-                        continue;
+                        Console.WriteLine(string.Format("Skipping texture index {0}: {1}", txrIndex, ((TxrBlock)block).ResourceInfo.OutputFilename));
                     }
+                    txrIndex++;
                 }
             }
 
@@ -114,12 +129,7 @@ namespace SrdTool
             foreach (Block block in Blocks)
             {
                 block.WriteData(ref srdWriter);
-                int paddingLength = 16 - (int)(srdWriter.BaseStream.Position % 16);
-                if (paddingLength != 16)
-                {
-                    byte[] padding = new byte[paddingLength];
-                    srdWriter.Write(padding);
-                }
+                Utils.WritePadding(ref srdWriter);
             }
             srdWriter.Close();
         }

@@ -44,10 +44,15 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BlockTypes\Block.cs" />
+    <Compile Include="BlockTypes\RsfBlock.cs" />
+    <Compile Include="BlockTypes\RsiBlock.cs" />
+    <Compile Include="BlockTypes\TxrBlock.cs" />
+    <Compile Include="BlockTypes\UnkownBlock.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Srd.cs" />
-    <Compile Include="SrdBlock.cs" />
+    <Compile Include="Utils.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
