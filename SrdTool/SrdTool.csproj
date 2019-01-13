@@ -45,10 +45,18 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BlockTypes\Block.cs" />
+    <Compile Include="BlockTypes\CfhBlock.cs" />
+    <Compile Include="BlockTypes\Ct0Block.cs" />
+    <Compile Include="BlockTypes\MatBlock.cs" />
+    <Compile Include="BlockTypes\MshBlock.cs" />
     <Compile Include="BlockTypes\RsfBlock.cs" />
     <Compile Include="BlockTypes\RsiBlock.cs" />
+    <Compile Include="BlockTypes\ScnBlock.cs" />
+    <Compile Include="BlockTypes\TreBlock.cs" />
+    <Compile Include="BlockTypes\TxiBlock.cs" />
     <Compile Include="BlockTypes\TxrBlock.cs" />
     <Compile Include="BlockTypes\UnkownBlock.cs" />
+    <Compile Include="BlockTypes\VtxBlock.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Srd.cs" />

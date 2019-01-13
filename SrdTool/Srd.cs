@@ -44,13 +44,37 @@ namespace SrdTool
                 string blockType = new ASCIIEncoding().GetString(reader.ReadBytes(4));
                 switch (blockType)
                 {
+                    case "$CFH":
+                        block = new CfhBlock(ref reader);
+                        break;
+
+                    case "$CT0":
+                        block = new Ct0Block(ref reader);
+                        break;
+
                     case "$RSF":
                         block = new RsfBlock(ref reader);
                         result.ResourceFolder = (RsfBlock)block;
                         break;
 
+                    case "$RSI":
+                        block = new RsiBlock(ref reader);
+                        break;
+
+                    case "$TRE":
+                        block = new TreBlock(ref reader);
+                        break;
+
+                    case "$TXI":
+                        block = new TxiBlock(ref reader);
+                        break;
+
                     case "$TXR":
                         block = new TxrBlock(ref reader);
+                        break;
+
+                    case "$VTX":
+                        block = new VtxBlock(ref reader);
                         break;
 
                     default:
@@ -87,7 +111,7 @@ namespace SrdTool
             {
                 if (block is TxrBlock)
                 {
-                    Console.WriteLine(string.Format("Extracting texture index {0}: {1}", txrIndex++, ((TxrBlock)block).ResourceInfo.OutputFilename));
+                    Console.WriteLine(string.Format("Extracting texture index {0}: {1}", txrIndex++, ((TxrBlock)block).ResourceBlock.StringData));
                     ((TxrBlock)block).ExtractImages(srdvPath, ResourceFolder.Name, extractMipmaps);
                 }
             }
@@ -112,12 +136,12 @@ namespace SrdTool
                 {
                     if (txrIndex == indexToReplace)
                     {
-                        Console.WriteLine(string.Format("Replacing texture index {0}: {1}", txrIndex, ((TxrBlock)block).ResourceInfo.OutputFilename));
+                        Console.WriteLine(string.Format("Replacing texture index {0}: {1}", txrIndex, ((TxrBlock)block).ResourceBlock.StringData));
                         ((TxrBlock)block).ReplaceImages(srdvPath, replacementImagePath, generateMipmaps);
                     }
                     else
                     {
-                        Console.WriteLine(string.Format("Skipping texture index {0}: {1}", txrIndex, ((TxrBlock)block).ResourceInfo.OutputFilename));
+                        Console.WriteLine(string.Format("Skipping texture index {0}: {1}", txrIndex, ((TxrBlock)block).ResourceBlock.StringData));
                     }
                     txrIndex++;
                 }

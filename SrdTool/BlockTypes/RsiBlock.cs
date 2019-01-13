@@ -7,24 +7,30 @@ using System.Threading.Tasks;
 
 namespace SrdTool
 {
-    struct MipmapInfo
+    struct ResourceInfo
     {
-        public int Start;
-        public int Length;
-        public int Unk1;
-        public int Unk2;
+        public int Unk1;    // Start/Offset
+        public int Unk2;    // Length?
+        public int Unk3;
+        public int Unk4;
     }
 
+    // TODO: This block actually seems to be a generic container for data,
+    // not just texture/mipmap info. It seems like Unk3 might determine the
+    // specific type of data or the layout?
     class RsiBlock : Block
     {
         public BlockHeader Header;
         public byte Unk1;   // 06
         public byte Unk2;   // 05
-        public byte Unk3;
-        public byte[] Unk4; // ???
-        public byte[] Unk5; // ???
-        public string OutputFilename;
-        public List<MipmapInfo> MipmapInfoList;
+        public byte Unk3;   // Layout/Data Type?
+        public byte Unk4;   // when Unk3 == 04, this contains the resourceCount instead of Unk5?
+        public int Unk5;    // when Unk3 == FF, this contains the resourceCount instead of Unk4?
+        public int Unk6;    // Size of ResourceInfoList2 entries?
+        public int Unk7;    // Offset of string data?
+        public List<ResourceInfo> ResourceInfoList1;
+        public List<byte[]> ResourceInfoList2;
+        public List<string> StringData;
 
         public RsiBlock(ref BinaryReader reader)
         {
@@ -33,59 +39,80 @@ namespace SrdTool
 
             Header = new BlockHeader(ref reader, "$RSI");
 
+            long startPosition = reader.BaseStream.Position;
+
             Unk1 = reader.ReadByte();
             Unk2 = reader.ReadByte();
             Unk3 = reader.ReadByte();
-            byte mipmapCount = reader.ReadByte();
-            Unk4 = reader.ReadBytes(4);
-            Unk5 = reader.ReadBytes(4);
-            int nameOffset = reader.ReadInt32();
-
-            MipmapInfoList = new List<MipmapInfo>();
-            for (int i = 0; i < mipmapCount; i++)
+            Unk4 = reader.ReadByte();
+            Unk5 = reader.ReadInt32();
+            Unk6 = reader.ReadInt32();
+            Unk7 = reader.ReadInt32();
+            
+            // Read the primary resource info table
+            ResourceInfoList1 = new List<ResourceInfo>();
+            for (int i = 0; i < (Unk3 == 0xFF ? Unk5 : Unk4); i++)
             {
-                MipmapInfoList.Add(
-                    new MipmapInfo
+                ResourceInfoList1.Add(
+                    new ResourceInfo
                     {
-                        Start = reader.ReadInt32() & 0x0FFFFFFF, // idk wtf the top byte is doing
-                        Length = reader.ReadInt32(),
                         Unk1 = reader.ReadInt32(),
-                        Unk2 = reader.ReadInt32()
+                        Unk2 = reader.ReadInt32(),
+                        Unk3 = reader.ReadInt32(),
+                        Unk4 = reader.ReadInt32()
                     }
                 );
             }
+            
+            // If present, read the secondary resource info table
+            if (Unk6 > 0)
+            {
+                ResourceInfoList2 = new List<byte[]>();
+                for (int i = 0; i < (Unk3 == 0xFF ? Unk5 : Unk4); i++)
+                {
+                    byte[] entry = reader.ReadBytes(Unk6);
+                    ResourceInfoList2.Add(entry);
+                }
+            }
 
+            // Read string data
+            reader.BaseStream.Seek(startPosition + Unk7, SeekOrigin.Begin);
+            StringData = new List<string>();
+            while (reader.BaseStream.Position < (startPosition + Header.DataLength))
+            {
+                string str = Utils.ReadNullTerminatedString(ref reader);
 
-            // TODO: Process palettes here.
+                if (string.IsNullOrEmpty(str))
+                    break;
 
-
-            // Read output image name.
-            //reader.BaseStream.Seek(nameOffset, SeekOrigin.Begin);
-            OutputFilename = Utils.ReadNullTerminatedString(ref reader);
+                StringData.Add(str);
+            }
         }
 
         public override void WriteData(ref BinaryWriter writer)
         {
+            throw new NotImplementedException();
+
             Header.WriteData(ref writer);
 
             writer.Write(Unk1);
             writer.Write(Unk2);
             writer.Write(Unk3);
-            writer.Write((byte)MipmapInfoList.Count);
-            writer.Write(Unk4);
+            writer.Write((byte)ResourceInfoList1.Count);
             writer.Write(Unk5);
-            writer.Write(BitConverter.GetBytes((int)(0x10 * (MipmapInfoList.Count + 1))));
+            writer.Write(Unk6);
+            writer.Write(BitConverter.GetBytes((int)(0x10 * (ResourceInfoList1.Count + 1))));
 
-            foreach (MipmapInfo mipmapInfo in MipmapInfoList)
+            foreach (ResourceInfo mipmapInfo in ResourceInfoList1)
             {
-                writer.Write(BitConverter.GetBytes(mipmapInfo.Start | 0x40000000)); // This seems to be how vanilla files are?
-                writer.Write(BitConverter.GetBytes(mipmapInfo.Length));
-                writer.Write(BitConverter.GetBytes(mipmapInfo.Unk1));
+                writer.Write(BitConverter.GetBytes(mipmapInfo.Unk1 | 0x40000000)); // This seems to be how vanilla files are?
                 writer.Write(BitConverter.GetBytes(mipmapInfo.Unk2));
+                writer.Write(BitConverter.GetBytes(mipmapInfo.Unk3));
+                writer.Write(BitConverter.GetBytes(mipmapInfo.Unk4));
             }
 
             // Write file name
-            writer.Write(new ASCIIEncoding().GetBytes(OutputFilename));
+            writer.Write(new ASCIIEncoding().GetBytes(StringData.First()));
             // Write null terminator byte
             writer.Write((byte)0);
         }

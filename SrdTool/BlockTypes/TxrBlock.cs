@@ -23,7 +23,7 @@ namespace SrdTool
         public byte MipmapCount;
         public byte Palette;
         public byte PaletteId;
-        public RsiBlock ResourceInfo;
+        public RsiBlock ResourceBlock;
 
         public TxrBlock(ref BinaryReader reader)
         {
@@ -39,15 +39,15 @@ namespace SrdTool
             Palette = reader.ReadByte();
             PaletteId = reader.ReadByte();
 
-            BinaryReader rsiReader = new BinaryReader(new MemoryStream(reader.ReadBytes(Header.SubdataLength)));
-            ResourceInfo = new RsiBlock(ref rsiReader);
-            rsiReader.Close();
+            Utils.ReadPadding(ref reader);  // Might be unnecessary
+            
+            ResourceBlock = new RsiBlock(ref reader);
         }
 
         public override void WriteData(ref BinaryWriter writer)
         {
             // Adjust Header.SubdataLength based on the size of our RsiBlock
-            Header.SubdataLength = 0x20 + ResourceInfo.Header.DataLength + (16 - (ResourceInfo.Header.DataLength % 16)) % 16;
+            Header.SubdataLength = 0x20 + ResourceBlock.Header.DataLength + (16 - (ResourceBlock.Header.DataLength % 16)) % 16;
             Header.WriteData(ref writer);
 
             writer.Write(BitConverter.GetBytes(Unk1));
@@ -60,7 +60,7 @@ namespace SrdTool
             writer.Write(Palette);
             writer.Write(PaletteId);
 
-            ResourceInfo.WriteData(ref writer);
+            ResourceBlock.WriteData(ref writer);
             Utils.WritePadding(ref writer);
 
             // Somehow we lose the $CT0 block when we load the file,
@@ -73,14 +73,14 @@ namespace SrdTool
         public void ExtractImages(string srdvPath, string outputFolder, bool extractMipmaps)
         {
             // Read image data based on resource info
-            for (int m = 0; m < (extractMipmaps ? ResourceInfo.MipmapInfoList.Count : 1); m++)
+            for (int m = 0; m < (extractMipmaps ? ResourceBlock.ResourceInfoList1.Count : 1); m++)
             {
                 byte[] imageData;
 
                 using (BinaryReader srdvReader = new BinaryReader(new FileStream(srdvPath, FileMode.Open)))
                 {
-                    srdvReader.BaseStream.Seek(ResourceInfo.MipmapInfoList[m].Start, SeekOrigin.Begin);
-                    imageData = srdvReader.ReadBytes(ResourceInfo.MipmapInfoList[m].Length);
+                    srdvReader.BaseStream.Seek(ResourceBlock.ResourceInfoList1[m].Unk1, SeekOrigin.Begin);
+                    imageData = srdvReader.ReadBytes(ResourceBlock.ResourceInfoList1[m].Unk2);
 
                     // TODO: Read palette data
                 }
@@ -123,7 +123,7 @@ namespace SrdTool
                         break;
                 }
 
-                if (ResourceInfo.Unk3 == 0x08)
+                if (ResourceBlock.Unk3 == 0x08)
                 {
                     DispWidth = (short)Utils.PowerOfTwo(DispWidth);
                     DispHeight = (short)Utils.PowerOfTwo(DispHeight);
@@ -139,7 +139,7 @@ namespace SrdTool
                 Bitmap tex = imageBinary.GetBitmap();
 
 
-                string mipmapName = ResourceInfo.OutputFilename;
+                string mipmapName = ResourceBlock.StringData.First();
                 int extensionLength = mipmapName.Split('.').Last().Length + 1;
 
                 if (m > 0)
@@ -191,7 +191,7 @@ namespace SrdTool
             Bitmap raw = new Bitmap(File.OpenRead(replacementImagePath));
 
             // Regenerate image data based on resource info
-            List<MipmapInfo> newMipmapInfoList = new List<MipmapInfo>();
+            List<ResourceInfo> newMipmapInfoList = new List<ResourceInfo>();
             using (BinaryWriter srdvWriter = new BinaryWriter(File.OpenWrite(srdvPath)))
             {
                 int m = 0;
@@ -200,13 +200,13 @@ namespace SrdTool
                     // Make sure the old texture isn't somehow outside the file bounds
                     // (This can be caused by replacing a texture and then
                     // reverting the SRDV file but not the SRD file)
-                    if (ResourceInfo.MipmapInfoList.Count >= m)
+                    if (ResourceBlock.ResourceInfoList1.Count >= m)
                     {
-                        int fixedStart = (int)Math.Min(ResourceInfo.MipmapInfoList[m].Start, srdvWriter.BaseStream.Length);
+                        int fixedStart = (int)Math.Min(ResourceBlock.ResourceInfoList1[m].Unk1, srdvWriter.BaseStream.Length);
                         srdvWriter.Seek(fixedStart, SeekOrigin.Begin);
 
                         // Zero out old texture data
-                        byte[] zero = new byte[ResourceInfo.MipmapInfoList[m].Length];
+                        byte[] zero = new byte[ResourceBlock.ResourceInfoList1[m].Unk2];
                         srdvWriter.Write(zero);
                     }
 
@@ -240,12 +240,12 @@ namespace SrdTool
                     replacementImage.UnlockBits(bitmapData);
 
                     // Create a new MipmapInfo to replace our old one
-                    MipmapInfo replacementMipmapInfo = new MipmapInfo
+                    ResourceInfo replacementMipmapInfo = new ResourceInfo
                     {
-                        Start = (int)srdvWriter.BaseStream.Position,
-                        Length = replacementImageData.Length,
-                        Unk1 = ResourceInfo.MipmapInfoList[m].Unk1,
-                        Unk2 = ResourceInfo.MipmapInfoList[m].Unk2
+                        Unk1 = (int)srdvWriter.BaseStream.Position,
+                        Unk2 = replacementImageData.Length,
+                        Unk3 = ResourceBlock.ResourceInfoList1[m].Unk3,
+                        Unk4 = ResourceBlock.ResourceInfoList1[m].Unk4
                     };
                     newMipmapInfoList.Add(replacementMipmapInfo);
 
@@ -264,12 +264,12 @@ namespace SrdTool
             }
 
             // Adjust the RsiBlock's header's data length
-            ResourceInfo.Header.DataLength -= 16 * ResourceInfo.MipmapInfoList.Count;
-            ResourceInfo.Header.DataLength += 16 * newMipmapInfoList.Count;
+            ResourceBlock.Header.DataLength -= 16 * ResourceBlock.ResourceInfoList1.Count;
+            ResourceBlock.Header.DataLength += 16 * newMipmapInfoList.Count;
 
             // Replace old info with regenerated info
-            ResourceInfo.MipmapInfoList = newMipmapInfoList;
-            MipmapCount = (byte)ResourceInfo.MipmapInfoList.Count;
+            ResourceBlock.ResourceInfoList1 = newMipmapInfoList;
+            MipmapCount = (byte)ResourceBlock.ResourceInfoList1.Count;
             DispWidth = (short)raw.Width;
             DispHeight = (short)raw.Height;
             Format = 0x01; // 32-bit BGRA
