@@ -21,7 +21,7 @@ namespace SrdTool
     class RsiBlock : Block
     {
         public BlockHeader Header;
-        public byte Unk1;   // 06
+        public byte Unk1;   // 06, EXCEPT NOPE APPARENTLY IT CAN ALSO BE 04
         public byte Unk2;   // 05
         public byte Unk3;   // Layout/Data Type?
         public byte Unk4;   // when Unk3 == 04, this contains the resourceCount instead of Unk5?
